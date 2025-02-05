@@ -106,7 +106,7 @@ fn show_stat(re: &Regex, pid: u32) {
     if let Some(cmd) = pidcmd(pid) {
         cmdline = cmd;
         if cmdline.len() > 27 {
-            cmdline = cmdline[0..26].to_string();
+            cmdline = cmdline[0..27].to_string();
         }
     }
 
