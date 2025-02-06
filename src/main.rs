@@ -35,11 +35,12 @@ fn pidcmd(pid: u32) -> Option<String>  {
         Ok(f) => f,
         Err(_e) => return None,
     };
+
+    // return the contents after the raplce step (0x00 -> ' ')
     match file.read_to_end(&mut buffer) {
         Ok(_len) => (),
         _ => return None,
     };
-
     let content = buffer.iter()
         .map(|&byte| if byte == 0x00 { ' ' } else { byte as char })
         .collect::<String>();
@@ -47,7 +48,7 @@ fn pidcmd(pid: u32) -> Option<String>  {
 }
 
 fn piduid(pid: u32) -> std::io::Result<u32> {
-    let filename = format!("/proc/{}/status", pid);
+    let filename = format!("/proc/{}", pid);
     let metadata = fs::metadata(filename)?;
     let uid = metadata.uid();
     Ok(uid)
