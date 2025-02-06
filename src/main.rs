@@ -61,11 +61,13 @@ fn get_username_from_uid(uid: u32) -> Option<String> {
     }
 }
 
-fn is_kernel(pid: u32) -> Option<bool> {
+fn is_kernel(pid: u32) -> bool {
     if let Some(contents) = pidcmd(pid) {
-        return Some(contents.is_empty());
+        contents.is_empty()
+    } else {
+        // treat "/proc/PID/cmdline" found-not-found as kernel mode
+        true
     }
-    None
 }
 
 // search for /proc/xxx/ directory where xxx is all digits
@@ -83,10 +85,8 @@ fn pids() -> Vec<u32> {
                 if let Some(file_name_str) = file_name.to_str() {
                     match file_name_str.parse::<u32>() {
                         Ok(value) => {
-                            if let Some(b) = is_kernel(value) {
-                                if !b {
-                                    vec.push(value);
-                                }
+                            if !is_kernel(value) {
+                                vec.push(value);
                             }
                         },
                         _ => (),
@@ -150,16 +150,15 @@ fn show_stat(re: &Regex, pid: u32) {
             }
 
         }
+        println!("{:>5} {:<8} {:<27} {:>8} {:>8} {:>8} {:>8} ", stat.pid, username, cmdline, stat.swap, stat.private_dirty + stat.private_clean, stat.pss, stat.rss);
     }
-
-    println!("{:>5} {:<8} {:<27} {:>8} {:>8} {:>8} {:>8}", stat.pid, username, cmdline, stat.swap, stat.private_dirty + stat.private_clean, stat.pss, stat.rss);
 }
 
 fn main() {
     let vec = pids();
     let re = Regex::new(r"(\w+[_\w]*):\s+(\d+)\s+kB").unwrap();
 
-    println!("  PID User     Command                         Swap      USS      PSS      RSS");
+    println!("  PID User     Command                         Swap      USS      PSS      RSS ");
 
     for pid in vec {
         show_stat(&re, pid);
