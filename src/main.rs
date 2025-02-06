@@ -49,7 +49,7 @@ fn piduid(pid: u32) -> Result<u32> {
     Ok(uid)
 }
 
-fn get_username_from_uid(uid: u32) -> Option<String> {
+fn username(uid: u32) -> Option<String> {
     if let Some(user) = get_user_by_uid(uid) {
         Some(user.name().to_string_lossy().into_owned())
     } else {
@@ -134,26 +134,23 @@ fn show_stat(re: &Regex, ucache: &mut HashMap<u32, String>, pid: u32) {
             }
         }
 
-        let mut username = String::new();
+        let mut uname = String::new();
         if let Ok(u) = piduid(pid) {
             if let Some(found) = ucache.get(&u) {
-                username = found.to_string();
+                uname = found.to_string();
             } else {
-                match get_username_from_uid(u) {
-                    Some(uname) => {
-                        ucache.insert(u, uname.clone());
-                        username = uname;
+                match username(u) {
+                    Some(un) => {
+                        ucache.insert(u, un.clone());
+                        uname = un;
                     },
                     None => (),
                 };
             }
         }
-        if username.len() > 8 {
-            username = username[0..7].to_string();
-        }
 
         println!("{:>5} {:<8} {:<27} {:>8} {:>8} {:>8} {:>8} ",
-            stat.pid, username, cmdline, stat.swap, stat.private_dirty + stat.private_clean, stat.pss, stat.rss);
+            stat.pid, uname, cmdline, stat.swap, stat.private_dirty + stat.private_clean, stat.pss, stat.rss);
     }
 }
 
