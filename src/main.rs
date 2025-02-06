@@ -1,6 +1,6 @@
 use regex::Regex;
 use std::fs;
-use std::io::{self, BufRead, Read};
+use std::io::{self, BufRead, Read, Result};
 use std::fs::File;
 use std::path::Path;
 use std::os::unix::fs::MetadataExt;
@@ -28,26 +28,20 @@ where P: AsRef<Path>, {
     Ok(io::BufReader::new(file).lines())
 }
 
-fn pidcmd(pid: u32) -> Option<String>  {
+fn pidcmd(pid: u32) -> Result<String> {
     let filename = format!("/proc/{}/cmdline", pid);
-    let mut buffer = Vec::new();
-    let mut file = match File::open(filename) {
-        Ok(f) => f,
-        Err(_e) => return None,
-    };
+    let mut file = File::open(filename)?;
 
     // return the contents after the raplce step (0x00 -> ' ')
-    match file.read_to_end(&mut buffer) {
-        Ok(_len) => (),
-        _ => return None,
-    };
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
     let content = buffer.iter()
         .map(|&byte| if byte == 0x00 { ' ' } else { byte as char })
         .collect::<String>();
-    Some(content)
+    Ok(content)
 }
 
-fn piduid(pid: u32) -> std::io::Result<u32> {
+fn piduid(pid: u32) -> Result<u32> {
     let filename = format!("/proc/{}", pid);
     let metadata = fs::metadata(filename)?;
     let uid = metadata.uid();
@@ -63,40 +57,38 @@ fn get_username_from_uid(uid: u32) -> Option<String> {
 }
 
 fn is_kernel(pid: u32) -> bool {
-    if let Some(contents) = pidcmd(pid) {
+    if let Ok(contents) = pidcmd(pid) {
         contents.is_empty()
     } else {
-        // treat "/proc/PID/cmdline" found-not-found as kernel mode
-        true
+        true // treat "/proc/PID/cmdline" file-not-found case as kernel mode
     }
 }
 
-// search for /proc/xxx/ directory where xxx is all digits
-fn pids() -> Vec<u32> {
+// search for /proc/PID/ directory where PID part all digits
+fn pids() -> Result<Vec<u32>> {
     let mut vec: Vec<u32> = Vec::new();
     let proc_path = Path::new("/proc");
-    if let Ok(dirs) = fs::read_dir(proc_path) {
-        for entry in dirs {
-            let entry = entry.unwrap();
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-            if let Some(file_name) = path.file_name() {
-                if let Some(file_name_str) = file_name.to_str() {
-                    match file_name_str.parse::<u32>() {
-                        Ok(value) => {
-                            if !is_kernel(value) {
-                                vec.push(value);
-                            }
-                        },
-                        _ => (),
-                    }
+    let dirs = fs::read_dir(proc_path)?;
+    for entry in dirs {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if let Some(file_name) = path.file_name() {
+            if let Some(file_name_str) = file_name.to_str() {
+                match file_name_str.parse::<u32>() {
+                    Ok(value) => {
+                        if !is_kernel(value) {
+                            vec.push(value);
+                        }
+                    },
+                    Err(_) => (),
                 }
             }
         }
     }
-    vec
+    Ok(vec)
 }
 
 fn show_stat(re: &Regex, pid: u32) {
@@ -104,7 +96,7 @@ fn show_stat(re: &Regex, pid: u32) {
     stat.pid = pid;
 
     let mut cmdline = String::new();
-    if let Some(cmd) = pidcmd(pid) {
+    if let Ok(cmd) = pidcmd(pid) {
         cmdline = cmd;
         if cmdline.len() > 27 {
             cmdline = cmdline[0..27].to_string();
@@ -151,17 +143,17 @@ fn show_stat(re: &Regex, pid: u32) {
             }
 
         }
-        println!("{:>5} {:<8} {:<27} {:>8} {:>8} {:>8} {:>8} ", stat.pid, username, cmdline, stat.swap, stat.private_dirty + stat.private_clean, stat.pss, stat.rss);
+        println!("{:>5} {:<8} {:<27} {:>8} {:>8} {:>8} {:>8} ",
+            stat.pid, username, cmdline, stat.swap, stat.private_dirty + stat.private_clean, stat.pss, stat.rss);
     }
 }
 
 fn main() {
-    let vec = pids();
     let re = Regex::new(r"(\w+[_\w]*):\s+(\d+)\s+kB").unwrap();
-
-    println!("  PID User     Command                         Swap      USS      PSS      RSS ");
-
-    for pid in vec {
-        show_stat(&re, pid);
+    if let Ok(vec) = pids() {
+        println!("  PID User     Command                         Swap      USS      PSS      RSS ");
+        for pid in vec {
+            show_stat(&re, pid);
+        }
     }
 }
