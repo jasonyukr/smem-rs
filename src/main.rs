@@ -5,6 +5,7 @@ use std::fs::File;
 use std::path::Path;
 use std::os::unix::fs::MetadataExt;
 use users::get_user_by_uid;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 #[derive(Default)]
@@ -91,28 +92,9 @@ fn pids() -> Result<Vec<u32>> {
     Ok(vec)
 }
 
-fn show_stat(re: &Regex, pid: u32) {
+fn show_stat(re: &Regex, ucache: &mut HashMap<u32, String>, pid: u32) {
     let mut stat: Stat = Stat::default();
     stat.pid = pid;
-
-    let mut cmdline = String::new();
-    if let Ok(cmd) = pidcmd(pid) {
-        cmdline = cmd;
-        if cmdline.len() > 27 {
-            cmdline = cmdline[0..27].to_string();
-        }
-    }
-
-    let mut username = String::new();
-    if let Ok(u) = piduid(pid) {
-        match get_username_from_uid(u) {
-            Some(uname) => username = uname,
-            None => (),
-        }
-    }
-    if username.len() > 8 {
-        username = username[0..7].to_string();
-    }
 
     let filename = format!("/proc/{}/smaps", pid);
     if let Ok(lines) = read_lines(filename) {
@@ -143,6 +125,33 @@ fn show_stat(re: &Regex, pid: u32) {
             }
 
         }
+
+        let mut cmdline = String::new();
+        if let Ok(cmd) = pidcmd(pid) {
+            cmdline = cmd;
+            if cmdline.len() > 27 {
+                cmdline = cmdline[0..27].to_string();
+            }
+        }
+
+        let mut username = String::new();
+        if let Ok(u) = piduid(pid) {
+            if let Some(found) = ucache.get(&u) {
+                username = found.to_string();
+            } else {
+                match get_username_from_uid(u) {
+                    Some(uname) => {
+                        ucache.insert(u, uname.clone());
+                        username = uname;
+                    },
+                    None => (),
+                };
+            }
+        }
+        if username.len() > 8 {
+            username = username[0..7].to_string();
+        }
+
         println!("{:>5} {:<8} {:<27} {:>8} {:>8} {:>8} {:>8} ",
             stat.pid, username, cmdline, stat.swap, stat.private_dirty + stat.private_clean, stat.pss, stat.rss);
     }
@@ -150,10 +159,12 @@ fn show_stat(re: &Regex, pid: u32) {
 
 fn main() {
     let re = Regex::new(r"(\w+[_\w]*):\s+(\d+)\s+kB").unwrap();
+    let mut ucache: HashMap<u32, String> = HashMap::new();
+
     if let Ok(vec) = pids() {
         println!("  PID User     Command                         Swap      USS      PSS      RSS ");
         for pid in vec {
-            show_stat(&re, pid);
+            show_stat(&re, &mut ucache, pid);
         }
     }
 }
