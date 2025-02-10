@@ -1,4 +1,3 @@
-use regex::Regex;
 use std::fs;
 use std::io::{self, BufRead, Read, Result};
 use std::fs::File;
@@ -92,40 +91,47 @@ fn pids() -> Result<Vec<u32>> {
     Ok(vec)
 }
 
-fn show_stat(re: &Regex, ucache: &mut HashMap<u32, String>, pid: u32) {
+fn get_kb(line: &str) -> u32 {
+    let vec: Vec<&str> = line.split_whitespace().collect();
+    if vec.len() == 2 {
+        if let Ok(val) = vec[0].parse::<u32>() {
+            return val;
+        }
+    }
+    0
+}
+
+fn show_stat(ucache: &mut HashMap<u32, String>, pid: u32) {
     let mut stat: Stat = Stat::default();
     stat.pid = pid;
 
     let filename = format!("/proc/{}/smaps", pid);
     if let Ok(lines) = read_lines(filename) {
-        for line in lines.flatten() {
-            match re.captures(&line) {
-                Some(caps) => {
-                    let size_label = &caps[1];
-                    let size_value = &caps[2];
-                    let mut value = 0;
-                    if let Ok(val) = size_value.parse::<u32>() {
-                        value = val;
-                    }
-                    match size_label.to_lowercase().as_str() {
-                        "size" => stat.size += value,
-                        "rss" => stat.rss += value,
-                        "pss" => stat.pss += value,
-                        "shared_clean" => stat.shared_clean += value,
-                        "shared_dirty" => stat.shared_dirty += value,
-                        "private_clean" => stat.private_clean += value,
-                        "count" => stat.count += value,
-                        "private_dirty" => stat.private_dirty += value,
-                        "referenced" => stat.referenced += value,
-                        "swap" => stat.swap += value,
-                        _ => (),
-                    }
-                },
-                None => (),
+        for mut line in lines.flatten() {
+            line = line.to_lowercase();
+
+            if let Some(kb_str) = line.strip_prefix("size:") {
+                stat.size += get_kb(kb_str);
+            } else if let Some(kb_str) = line.strip_prefix("rss:") {
+                stat.rss += get_kb(kb_str);
+            } else if let Some(kb_str) = line.strip_prefix("pss:") {
+                stat.pss += get_kb(kb_str);
+            } else if let Some(kb_str) = line.strip_prefix("shared_clean:") {
+                stat.shared_clean += get_kb(kb_str);
+            } else if let Some(kb_str) = line.strip_prefix("shared_dirty:") {
+                stat.shared_dirty += get_kb(kb_str);
+            } else if let Some(kb_str) = line.strip_prefix("private_clean:") {
+                stat.private_clean += get_kb(kb_str);
+            } else if let Some(kb_str) = line.strip_prefix("count:") {
+                stat.count += get_kb(kb_str);
+            } else if let Some(kb_str) = line.strip_prefix("private_dirty:") {
+                stat.private_dirty += get_kb(kb_str);
+            } else if let Some(kb_str) = line.strip_prefix("referenced:") {
+                stat.referenced += get_kb(kb_str);
+            } else if let Some(kb_str) = line.strip_prefix("swap:") {
+                stat.swap += get_kb(kb_str);
             }
-
         }
-
         let mut cmdline = String::new();
         if let Ok(cmd) = pidcmd(pid) {
             cmdline = cmd;
@@ -155,13 +161,11 @@ fn show_stat(re: &Regex, ucache: &mut HashMap<u32, String>, pid: u32) {
 }
 
 fn main() {
-    let re = Regex::new(r"(\w+[_\w]*):\s+(\d+)\s+kB").unwrap();
     let mut ucache: HashMap<u32, String> = HashMap::new();
-
     if let Ok(vec) = pids() {
         println!("  PID User     Command                         Swap      USS      PSS      RSS ");
         for pid in vec {
-            show_stat(&re, &mut ucache, pid);
+            show_stat(&mut ucache, pid);
         }
     }
 }
