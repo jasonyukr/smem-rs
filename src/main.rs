@@ -180,7 +180,6 @@ fn main() {
     if args.len() > 1 {
         match args[1].parse::<u32>() {
             Ok(n) => {
-                print_header();
                 show_stat(&mut ucache, n);
                 return ();
             },
