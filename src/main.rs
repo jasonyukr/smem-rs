@@ -5,6 +5,8 @@ use std::path::Path;
 use std::os::unix::fs::MetadataExt;
 use users::get_user_by_uid;
 use std::collections::HashMap;
+use std::io::Write;
+use std::process;
 
 #[derive(Debug)]
 #[derive(Default)]
@@ -102,6 +104,7 @@ fn get_kb(line: &str) -> u32 {
 }
 
 fn show_stat(ucache: &mut HashMap<u32, String>, pid: u32) {
+    let mut stdout = io::stdout();
     let mut stat: Stat = Stat::default();
     stat.pid = pid;
 
@@ -155,8 +158,13 @@ fn show_stat(ucache: &mut HashMap<u32, String>, pid: u32) {
             }
         }
 
-        println!("{:>5} {:<8} {:<27} {:>8} {:>8} {:>8} {:>8} ",
+        let res = writeln!(&mut stdout, "{:>5} {:<8} {:<27} {:>8} {:>8} {:>8} {:>8} ",
             stat.pid, uname, cmdline, stat.swap, stat.private_dirty + stat.private_clean, stat.pss, stat.rss);
+        // Terminate the app if the writeln!() has failed due to the error like PIPE-ERROR
+        match res {
+            Ok(_) => (),
+            Err(_e) => { process::exit(1) },
+        }
     }
 }
 
