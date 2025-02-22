@@ -7,6 +7,7 @@ use users::get_user_by_uid;
 use std::collections::HashMap;
 use std::io::Write;
 use std::process;
+use std::env;
 
 #[derive(Debug)]
 #[derive(Default)]
@@ -168,10 +169,27 @@ fn show_stat(ucache: &mut HashMap<u32, String>, pid: u32) {
     }
 }
 
+fn print_header() {
+    println!("  PID User     Command                         Swap      USS      PSS      RSS ");
+}
+
 fn main() {
     let mut ucache: HashMap<u32, String> = HashMap::new();
+
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 {
+        match args[1].parse::<u32>() {
+            Ok(n) => {
+                print_header();
+                show_stat(&mut ucache, n);
+                return ();
+            },
+            Err(_e) => (),
+        }
+    }
+
     if let Ok(vec) = pids() {
-        println!("  PID User     Command                         Swap      USS      PSS      RSS ");
+        print_header();
         for pid in vec {
             show_stat(&mut ucache, pid);
         }
